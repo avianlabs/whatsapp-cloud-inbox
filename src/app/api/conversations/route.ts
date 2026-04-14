@@ -30,9 +30,12 @@ export async function GET(request: Request) {
     const parsedLimit = Number.parseInt(searchParams.get('limit') ?? '', 10);
     const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 50;
 
+    const phoneNumber = searchParams.get('phone_number');
+
     const response = await whatsappClient.conversations.list({
       phoneNumberId: PHONE_NUMBER_ID,
       ...(status && { status: status as 'active' | 'ended' }),
+      ...(phoneNumber && { phoneNumber }),
       limit,
       fields: buildKapsoFields([
         'contact_name',
