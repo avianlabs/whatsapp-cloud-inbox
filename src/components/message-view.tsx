@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { format, isValid, isToday, isYesterday, differenceInHours } from 'date-fns';
-import { RefreshCw, Paperclip, Send, X, AlertCircle, MessageSquare, XCircle, ListTree, ArrowLeft } from 'lucide-react';
+import { RefreshCw, Paperclip, Send, X, AlertCircle, MessageSquare, XCircle, ListTree, ArrowLeft, Languages, Loader2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MediaMessage } from '@/components/media-message';
 import { TemplateSelectorDialog } from '@/components/template-selector-dialog';
@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import type { MediaData } from '@kapso/whatsapp-cloud-api';
+import { translationCache, type TranslationEntry } from '@/lib/translation-cache';
 
 type Message = {
   id: string;
@@ -133,7 +134,12 @@ export function MessageView({ conversationId, phoneNumber, contactName, onTempla
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [showInteractiveDialog, setShowInteractiveDialog] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const [translations, setTranslations] = useState<Record<string, TranslationEntry>>({});
+  const [translating, setTranslating] = useState<Record<string, boolean>>({});
+  const [showTranslation, setShowTranslation] = useState<Record<string, boolean>>({});
+  const [suggesting, setSuggesting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previousMessageCountRef = useRef(0);
@@ -141,6 +147,92 @@ export function MessageView({ conversationId, phoneNumber, contactName, onTempla
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  const handleTranslate = useCallback(async (messageId: string, text: string) => {
+    // Toggle off if already showing
+    if (showTranslation[messageId]) {
+      setShowTranslation(prev => ({ ...prev, [messageId]: false }));
+      return;
+    }
+
+    // Check cache first (memory then localStorage)
+    if (translations[messageId]) {
+      setShowTranslation(prev => ({ ...prev, [messageId]: true }));
+      return;
+    }
+
+    const cached = translationCache.get(messageId);
+    if (cached) {
+      setTranslations(prev => ({ ...prev, [messageId]: cached }));
+      setShowTranslation(prev => ({ ...prev, [messageId]: true }));
+      return;
+    }
+
+    // Call API
+    setTranslating(prev => ({ ...prev, [messageId]: true }));
+    setShowTranslation(prev => ({ ...prev, [messageId]: true }));
+
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!res.ok) throw new Error('Translation failed');
+
+      const data = await res.json();
+      const entry: TranslationEntry = {
+        translation: data.translation,
+        detectedLanguage: data.detectedLanguage,
+        translatedAt: new Date().toISOString(),
+      };
+
+      setTranslations(prev => ({ ...prev, [messageId]: entry }));
+      translationCache.set(messageId, entry);
+    } catch (err) {
+      console.error('[Translate]', err);
+      setShowTranslation(prev => ({ ...prev, [messageId]: false }));
+    } finally {
+      setTranslating(prev => ({ ...prev, [messageId]: false }));
+    }
+  }, [showTranslation, translations]);
+
+  const handleSuggestReply = useCallback(async () => {
+    if (suggesting || messages.length === 0) return;
+
+    setSuggesting(true);
+    try {
+      const context = messages.slice(-10).map((m) => ({
+        direction: m.direction,
+        content: m.content || m.caption || '',
+      })).filter((m) => m.content);
+
+      const res = await fetch('/api/suggest-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: context, contactName }),
+      });
+
+      if (!res.ok) throw new Error('Suggestion failed');
+
+      const data = await res.json();
+      if (data.suggestion) {
+        setMessageInput(data.suggestion);
+        // Auto-resize textarea after fill
+        requestAnimationFrame(() => {
+          if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+            textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+          }
+        });
+      }
+    } catch (err) {
+      console.error('[SuggestReply]', err);
+    } finally {
+      setSuggesting(false);
+    }
+  }, [suggesting, messages, contactName]);
 
   const fetchMessages = useCallback(async () => {
     if (!conversationId) return;
@@ -485,6 +577,40 @@ export function MessageView({ conversationId, phoneNumber, contactName, onTempla
                       </p>
                     )}
 
+                    {/* Translation */}
+                    {message.content && message.content !== '[Image attached]' && (
+                      <div className="mt-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTranslate(message.id, message.content);
+                          }}
+                          className={cn(
+                            "inline-flex items-center gap-1 text-[11px] hover:opacity-80 transition-opacity",
+                            showTranslation[message.id] ? "text-[#00a884]" : "text-[#667781]"
+                          )}
+                        >
+                          {translating[message.id] ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Languages className="h-3 w-3" />
+                          )}
+                          {showTranslation[message.id] ? 'Hide' : 'Translate'}
+                        </button>
+
+                        {showTranslation[message.id] && translations[message.id] && (
+                          <div className="mt-1 pt-1 border-t border-black/5">
+                            <p className="text-sm break-words whitespace-pre-wrap italic text-[#667781]">
+                              {translations[message.id].translation}
+                            </p>
+                            <span className="text-[10px] text-[#667781] opacity-60">
+                              Translated from {translations[message.id].detectedLanguage}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-1.5 mt-1">
                       <span className="text-[11px] text-[#667781]">
                         {formatMessageTime(message.createdAt)}
@@ -594,13 +720,45 @@ export function MessageView({ conversationId, phoneNumber, contactName, onTempla
               >
                 <ListTree className="h-5 w-5" />
               </Button>
-              <Input
-                type="text"
+              <Button
+                type="button"
+                onClick={handleSuggestReply}
+                disabled={sending || suggesting || messages.length === 0}
+                size="icon"
+                variant="ghost"
+                className={cn(
+                  "hover:bg-[#f0f2f5]",
+                  suggesting ? "text-[#00a884]" : "text-[#667781] hover:text-[#00a884]"
+                )}
+                title="AI suggest reply"
+              >
+                {suggesting ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-5 w-5" />
+                )}
+              </Button>
+              <textarea
+                ref={textareaRef}
                 value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
+                onChange={(e) => {
+                  setMessageInput(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = e.target.scrollHeight + 'px';
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (messageInput.trim() || selectedFile) {
+                      const form = e.currentTarget.closest('form');
+                      form?.requestSubmit();
+                    }
+                  }
+                }}
                 placeholder="Type a message"
                 disabled={sending}
-                className="flex-1 bg-white border-[#d1d7db] focus-visible:ring-[#00a884] rounded-lg"
+                rows={1}
+                className="flex-1 bg-white border border-[#d1d7db] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00a884] rounded-lg px-3 py-2 text-sm resize-none"
               />
               <Button
                 type="submit"
