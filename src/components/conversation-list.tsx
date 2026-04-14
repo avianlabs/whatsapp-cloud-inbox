@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
+import { useEffect, useState, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { format, isValid, isToday, isYesterday } from 'date-fns';
 import { RefreshCw, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -75,9 +75,18 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchConversations = useCallback(async () => {
+  const [serverSearchQuery, setServerSearchQuery] = useState('');
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchConversations = useCallback(async (phoneFilter?: string) => {
     try {
-      const response = await fetch('/api/conversations');
+      const params = new URLSearchParams();
+      if (phoneFilter) {
+        params.set('phone_number', phoneFilter);
+        params.set('limit', '100');
+      }
+      const url = `/api/conversations${params.toString() ? `?${params}` : ''}`;
+      const response = await fetch(url);
       const data = await response.json();
       setConversations(data.data || []);
     } catch (error) {
@@ -97,10 +106,10 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
     fetchConversations();
   };
 
-  // Auto-polling for conversations (every 10 seconds)
+  // Auto-polling for conversations (every 10 seconds) — pause during server search
   const { isPolling } = useAutoPolling({
     interval: 10000,
-    enabled: true,
+    enabled: !serverSearchQuery,
     onPoll: fetchConversations
   });
 
@@ -124,7 +133,46 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
     selectByPhoneNumber
   }));
 
+  // Determine if search query looks like a phone number (digits, +, spaces)
+  const isPhoneSearch = /^[\d\s+\-()]{4,}$/.test(searchQuery.trim());
+
+  // Debounced server-side search for phone numbers
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      // Empty search → reload all conversations
+      if (serverSearchQuery) {
+        setServerSearchQuery('');
+        fetchConversations();
+      }
+      return;
+    }
+
+    if (isPhoneSearch) {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = setTimeout(() => {
+        const digits = searchQuery.replace(/\D/g, '');
+        if (digits.length >= 4) {
+          setServerSearchQuery(digits);
+          fetchConversations(digits);
+        }
+      }, 500);
+    } else if (serverSearchQuery) {
+      // Switched from phone to name search — reload all
+      setServerSearchQuery('');
+      fetchConversations();
+    }
+
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, [searchQuery, isPhoneSearch, fetchConversations, serverSearchQuery]);
+
   const filteredConversations = conversations.filter((conv) => {
+    // If server-side phone search is active, don't filter again client-side
+    if (serverSearchQuery) return true;
+
+    if (!searchQuery.trim()) return true;
+
     const query = searchQuery.toLowerCase();
     return (
       conv.phoneNumber.toLowerCase().includes(query) ||
