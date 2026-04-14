@@ -139,7 +139,7 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, onTemp
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-w-[calc(100vw-2rem)] overflow-hidden">
         <DialogHeader>
           <DialogTitle>Send template message</DialogTitle>
           <DialogDescription>
@@ -162,15 +162,15 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, onTemp
             No approved templates found
           </div>
         ) : (
-          <ScrollArea className="h-[400px] pr-4">
-            <div className="space-y-3">
+          <ScrollArea className="h-[400px]">
+            <div className="space-y-3 pr-4">
               {templates.map((template) => (
                 <div
                   key={template.id}
-                  className="p-4 border border-[#d1d7db] rounded-lg hover:bg-[#f0f2f5] transition-colors"
+                  className="p-4 border border-[#d1d7db] rounded-lg hover:bg-[#f0f2f5] transition-colors overflow-hidden"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 overflow-hidden">
                       <h3 className="font-medium text-[#111b21] truncate">
                         {template.name}
                       </h3>

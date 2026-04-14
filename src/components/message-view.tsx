@@ -467,9 +467,27 @@ export function MessageView({ conversationId, phoneNumber, contactName, onTempla
             )}
             <div className="flex-1 min-w-0">
               <h2 className="text-base font-medium text-[#111b21] truncate">{contactName || phoneNumber || 'Conversation'}</h2>
-              {contactName && phoneNumber && (
-                <p className="text-xs text-[#667781] truncate">{phoneNumber}</p>
-              )}
+              {(() => {
+                const userIdMatch = contactName?.match(/\((user_[a-zA-Z0-9]+)\)/);
+                const userId = userIdMatch?.[1];
+                return (
+                  <div className="flex items-center gap-2">
+                    {contactName && phoneNumber && (
+                      <p className="text-xs text-[#667781] truncate">{phoneNumber}</p>
+                    )}
+                    {userId && (
+                      <a
+                        href={`https://admin.internal.sling.money/users/${userId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-[#00a884] hover:underline flex-shrink-0"
+                      >
+                        View profile ↗
+                      </a>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <Button
