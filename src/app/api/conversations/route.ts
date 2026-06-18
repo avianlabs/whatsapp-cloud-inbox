@@ -54,6 +54,10 @@ export async function GET(request: Request) {
       const lastMessageText = typeof kapso?.lastMessageText === 'string' ? kapso.lastMessageText : undefined;
       const lastMessageType = typeof kapso?.lastMessageType === 'string' ? kapso.lastMessageType : undefined;
 
+      // User has replied if there is a valid lastInboundAt timestamp
+      const lastInboundAt = typeof kapso?.lastInboundAt === 'string' ? kapso.lastInboundAt : undefined;
+      const hasUserReplied = lastInboundAt !== undefined && !Number.isNaN(Date.parse(lastInboundAt));
+
       return {
         id: conversation.id,
         phoneNumber: conversation.phoneNumber ?? '',
@@ -63,6 +67,7 @@ export async function GET(request: Request) {
         metadata: conversation.metadata ?? {},
         contactName: typeof kapso?.contactName === 'string' ? kapso.contactName : undefined,
         messagesCount: typeof kapso?.messagesCount === 'number' ? kapso.messagesCount : undefined,
+        hasUserReplied,
         lastMessage: lastMessageText
           ? {
               content: lastMessageText,
