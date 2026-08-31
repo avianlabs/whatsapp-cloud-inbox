@@ -5,6 +5,7 @@ import { format, isValid, isToday, isYesterday } from 'date-fns';
 import { RefreshCw, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoPolling } from '@/hooks/use-auto-polling';
+import { detectLanguageFromPhone } from '@/lib/language-detect';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -253,7 +254,9 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
           </div>
         ) : (
           <div className="w-full overflow-hidden">
-          {filteredConversations.map((conversation) => (
+          {filteredConversations.map((conversation) => {
+            const lang = detectLanguageFromPhone(conversation.phoneNumber);
+            return (
             <button
               key={conversation.id}
               onClick={() => onSelectConversation(conversation)}
@@ -270,9 +273,19 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
                 </Avatar>
                 <div className="flex-1 min-w-0 flex justify-between items-start gap-4 overflow-hidden">
                   <div className="flex-1 min-w-0 overflow-hidden">
-                    <p className="font-medium text-[#111b21] truncate">
-                      {conversation.contactName || conversation.phoneNumber}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-medium text-[#111b21] truncate">
+                        {conversation.contactName || conversation.phoneNumber}
+                      </p>
+                      {lang && (
+                        <span
+                          className="flex-shrink-0 text-xs"
+                          title={lang.label}
+                        >
+                          {lang.flag}
+                        </span>
+                      )}
+                    </div>
                     {conversation.lastMessage && (
                       <p className="text-sm text-[#667781] truncate mt-0.5">
                         {conversation.lastMessage.direction === 'outbound' && (
@@ -288,7 +301,8 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
                 </div>
               </div>
             </button>
-          ))
+            );
+          })
           }
           </div>
         )}

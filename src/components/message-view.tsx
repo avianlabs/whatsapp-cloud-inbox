@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import type { MediaData } from '@kapso/whatsapp-cloud-api';
 import { translationCache, type TranslationEntry } from '@/lib/translation-cache';
+import { detectLanguageFromPhone } from '@/lib/language-detect';
 
 type Message = {
   id: string;
@@ -475,6 +476,14 @@ export function MessageView({ conversationId, phoneNumber, contactName, onTempla
                     {contactName && phoneNumber && (
                       <p className="text-xs text-[#667781] truncate">{phoneNumber}</p>
                     )}
+                    {(() => {
+                      const lang = detectLanguageFromPhone(phoneNumber || '');
+                      return lang ? (
+                        <span className="text-xs text-[#667781] flex-shrink-0" title={lang.label}>
+                          {lang.flag} {lang.code}
+                        </span>
+                      ) : null;
+                    })()}
                     {userId && (
                       <a
                         href={`https://admin.internal.sling.money/users/${userId}`}
