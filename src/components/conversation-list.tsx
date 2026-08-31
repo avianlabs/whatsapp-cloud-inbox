@@ -20,6 +20,7 @@ type Conversation = {
   metadata?: Record<string, unknown>;
   contactName?: string;
   messagesCount?: number;
+  hasUserReplied?: boolean;
   lastMessage?: {
     content: string;
     direction: string;
@@ -74,6 +75,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterReplied, setFilterReplied] = useState(false);
 
   const [serverSearchQuery, setServerSearchQuery] = useState('');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -168,6 +170,9 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
   }, [searchQuery, isPhoneSearch, fetchConversations, serverSearchQuery]);
 
   const filteredConversations = conversations.filter((conv) => {
+    // Apply "replied" filter
+    if (filterReplied && !conv.hasUserReplied) return false;
+
     // If server-side phone search is active, don't filter again client-side
     if (serverSearchQuery) return true;
 
@@ -224,15 +229,30 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
               />
             )}
           </div>
-          <Button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            variant="ghost"
-            size="icon"
-            className="text-[#667781] hover:bg-[#d1d7db]/30"
-          >
-            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              onClick={() => setFilterReplied(!filterReplied)}
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "text-xs h-7 px-2.5 rounded-full transition-colors",
+                filterReplied
+                  ? "bg-[#00a884] hover:bg-[#008f6f] text-white"
+                  : "text-[#667781] hover:bg-[#d1d7db]/30"
+              )}
+            >
+              Replied
+            </Button>
+            <Button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              variant="ghost"
+              size="icon"
+              className="text-[#667781] hover:bg-[#d1d7db]/30"
+            >
+              <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+            </Button>
+          </div>
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#667781]" />
@@ -249,7 +269,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
       <ScrollArea className="flex-1 h-0 overflow-hidden">
         {filteredConversations.length === 0 ? (
           <div className="p-4 text-center text-[#667781]">
-            {searchQuery ? 'No conversations found' : 'No conversations yet'}
+            {searchQuery || filterReplied ? 'No conversations found' : 'No conversations yet'}
           </div>
         ) : (
           <div className="w-full overflow-hidden">
